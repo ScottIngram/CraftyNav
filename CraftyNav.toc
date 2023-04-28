@@ -1,0 +1,10 @@
+## Interface: 100005
+## Title: CraftyNav
+## Author: Scott Ingram
+## Version: v0.1
+## Notes: A right click on a reagent in your crafting panel will jump to the reagent's recipe page, etc.
+
+Globals.lua
+Debug.lua
+CraftyNav.lua
+
