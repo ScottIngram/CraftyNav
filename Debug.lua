@@ -1,59 +1,145 @@
-local MY_NAME, MY_GLOBALS = ...
+local ADDON_NAME, ADDON_VARS = ...
 
--- /dump C_TradeSkillUI.OpenRecipe(310526)
--- DevTools_Dump({"fun","yay"})
--- Blizzard_ProfessionsRecipeList -> OnSelectionChanged(o, elementData, selected)
+local ERR_MSG = "DEBUGGER SYNTAX ERROR: invoke via:func() not via.func()"
+local CONSTANTS = {
+    ALL_MSGS = 0,
+    ALL = 0,
+    TRACE = 2,
+    INFO = 4,
+    WARN = 6,
+    ERROR = 8,
+    NONE = 10,
+}
+ADDON_VARS.DEBUG = CONSTANTS
+local Debug = { }
 
-MY_GLOBALS.DEBUG = {}
-local DEBUG = MY_GLOBALS.DEBUG
-DEBUG.OFF = true
-
-function DEBUG.dump(...)
-    if (DEBUG.OFF) then return end
-    DevTools_Dump(...)
-    --print(MY_GLOBALS.inspect(...))
+local function isDebuggerObj(zelf)
+    return zelf and zelf.DEBUGGER
 end
 
-function DEBUG.print(...)
-    if (DEBUG.OFF) then return end
+local function newInstance(isSilent)
+    local newInstance = {
+        isSilent = isSilent,
+        DEBUGGER = true
+    }
+    setmetatable(newInstance, { __index = Debug })
+    return newInstance
+end
+
+function CONSTANTS.newDebugger(showOnlyMessagesAtOrAbove)
+    local isValidNoiseLevel = type(showOnlyMessagesAtOrAbove) == "number"
+    assert(isValidNoiseLevel, "Debugger:newDebugger() Invalid Noise Level: '".. tostring(showOnlyMessagesAtOrAbove) .."'")
+
+    local debugger = { }
+    debugger.error = newInstance(showOnlyMessagesAtOrAbove > CONSTANTS.ERROR)
+    debugger.warn = newInstance(showOnlyMessagesAtOrAbove > CONSTANTS.WARN)
+    debugger.info = newInstance(showOnlyMessagesAtOrAbove > CONSTANTS.INFO)
+    debugger.trace = newInstance(showOnlyMessagesAtOrAbove > CONSTANTS.TRACE)
+    return debugger
+end
+
+function Debug:isMute()
+    assert(isDebuggerObj(self), ERR_MSG)
+    return self.isSilent
+end
+
+function Debug:isActive()
+    assert(isDebuggerObj(self), ERR_MSG)
+    return not self.isSilent
+end
+
+
+function Debug:dump(...)
+    assert(isDebuggerObj(self), ERR_MSG)
+    if self.isSilent then return end
+    DevTools_Dump(...)
+end
+
+function Debug:print(...)
+    assert(isDebuggerObj(self), ERR_MSG)
+    if self.isSilent then return end
     print(...)
 end
 
-function DEBUG.getName(obj, default)
+function table.pack(...)
+    return { n = select("#", ...), ... }
+end
+
+function Debug:out(indentChar, indentWidth, label, ...)
+    assert(isDebuggerObj(self), ERR_MSG)
+    if self.isSilent then return end
+    local indent = string.rep(indentChar,indentWidth)
+    --local args = { ... } -- this may be where the nils are getting shortchanged
+    local args = table.pack(...)
+    local out = { indent, " ", label, " " }
+    --for i,v in ipairs(args) do
+    for i=1,args.n do
+        local v = args[i]
+        local isOdd = i%2 == 1
+        if isOdd then
+            -- table.insert(out, " .. ")
+            table.insert(out, self:asString(v))
+        else
+            table.insert(out, ": ")
+            table.insert(out, self:asString(v))
+            if i~= args.n then
+                table.insert(out, " .. ")
+            end
+        end
+    end
+    local str = table.concat(out,"")
+    print(str)
+end
+
+local function getName(obj, default)
+    assert(isDebuggerObj(self), ERR_MSG)
     if(obj and obj.GetName) then
         return obj:GetName() or default or "UNKNOWN"
     end
     return default or "UNNAMED"
 end
 
-function DEBUG.messengerForEvent(eventName, msg)
+function Debug:messengerForEvent(eventName, msg)
+    assert(isDebuggerObj(self), ERR_MSG)
     return function(obj)
-        if (DEBUG.OFF) then return end
-        print(DEBUG.getName(obj,eventName).." said ".. msg .."! ")
+        if self.isSilent then return end
+        print(getName(obj,eventName).." said ".. msg .."! ")
     end
 end
 
-function DEBUG.makeDummyStubForCallback(obj, eventName, msg)
-    DEBUG.print("makeDummyStubForCallback for " .. eventName)
+function Debug:makeDummyStubForCallback(obj, eventName, msg)
+    assert(isDebuggerObj(self), ERR_MSG)
+    self:print("makeDummyStubForCallback for " .. eventName)
     obj:RegisterEvent(eventName);
-    obj:SetScript("OnEvent", DEBUG.messengerForEvent(eventName,msg))
+    obj:SetScript("OnEvent", self:messengerForEvent(eventName,msg))
 
 end
 
-function DEBUG.run(callback)
-    if (DEBUG.OFF) then return end
+function Debug:run(callback)
+    assert(isDebuggerObj(self), ERR_MSG)
+    if self.isSilent then return end
     callback()
 end
 
-function DEBUG.dumpKeys(obj)
-    if (DEBUG.OFF) then return end
-    pcall(function(object)
-        for k, v in pairs(object or {}) do
-            DEBUG.print(DEBUG.asString(k).." <-> ".. DEBUG.asString(v))
-        end
-    end, obj)
+function Debug:dumpKeys(object)
+    assert(isDebuggerObj(self), ERR_MSG)
+    if self.isSilent then return end
+    local isNumeric = true
+    for k,v in pairs(object) do
+        if (type(k) ~= "number") then isNumeric = false end
+    end
+    local keys = {}
+    for k, v in pairs(object or {}) do
+        local key = isNumeric and k or self:asString(k)
+        table.insert(keys,key)
+    end
+    table.sort(keys)
+    for i, k in ipairs(keys) do
+        self:print(k.." <-> ".. self:asString(object[k]))
+    end
 end
 
-function DEBUG.asString(v)
-    return ((type(v) == "string") and v) or tostring(v) or "NiL"
+function Debug:asString(v)
+    assert(isDebuggerObj(self), ERR_MSG)
+    return ((v==nil)and"nil") or ((type(v) == "string") and v) or tostring(v) -- or
 end
