@@ -41,11 +41,16 @@ function EventHandlers:ADDON_LOADED(addonName)
     if addonName == ADDON_NAME then
         debug.trace:print("ADDON_LOADED", addonName)
     end
+
+    if addonName == "Blizzard_Professions" then
+        -- this happens when the user opens up a professions window
+        -- until then, the UI knows nothing about the ProfessionsFrame and will just throw errors if we try to do anything
+        initalizeAddonStuff()
+    end
 end
 
 function EventHandlers:PLAYER_LOGIN()
     debug.trace:print("PLAYER_LOGIN")
-    initalizeAddonStuff()
 end
 
 function EventHandlers:PLAYER_ENTERING_WORLD(isInitialLogin, isReloadingUi)
