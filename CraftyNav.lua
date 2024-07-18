@@ -303,6 +303,7 @@ function reagentCallbackForPostClick(reagentBtn, whichMouseButtonStr, isPressed)
         C_TradeSkillUI.SetRecipeItemNameFilter(nil)
         PlaySound(SOUNDKIT.UI_PROFESSION_FILTER_MENU_OPEN_CLOSE);
         C_TradeSkillUI.OpenRecipe(recipeIdFromButton)
+        pushHistory(recipeIdFromButton)
     end
 end
 
@@ -312,6 +313,161 @@ function reagentCallbackForOnEnter(reagentBtn)
     GameTooltip:AddLine(CraftyNav.L10N.TOOLTIP_REAGENT, 0, 1, 0)
     GameTooltip:Show()
 end
+
+-------------------------------------------------------------------------------
+-- Sounds
+-------------------------------------------------------------------------------
+
+---@class SND
+SND = {
+    DELETE   = SOUNDKIT.IG_CHAT_SCROLL_UP,
+    KEYPRESS = SOUNDKIT.IG_MINIMAP_ZOOM_IN, -- IG_CHAT_SCROLL_DOWN
+    ENTER    = SOUNDKIT.IG_CHAT_BOTTOM,
+    NAV_INTO = SOUNDKIT.IG_ABILITY_PAGE_TURN, -- IG_QUEST_LOG_OPEN, --  IG_MAINMENU_OPTION
+    NAV_OUTOF= SOUNDKIT.IG_ABILITY_PAGE_TURN, -- IG_QUEST_LOG_OPEN, --  IG_MAINMENU_OPTION
+    OPEN     = SOUNDKIT.IG_SPELLBOOK_OPEN, -- IG_BACKPACK_OPEN, -- IG_MAINMENU_OPTION_CHECKBOX_OFF
+    CLOSE    = SOUNDKIT.IG_SPELLBOOK_CLOSE, -- IG_CHARACTER_INFO_CLOSE, -- IG_MAINMENU_OPTION_CHECKBOX_ON
+    SCROLL_UP = SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_ON,
+    SCROLL_DOWN = SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_ON,
+}
+play = PlaySound
+
+-------------------------------------------------------------------------------
+-- Naqvigation History & array routines
+-------------------------------------------------------------------------------
+
+local backBtn, forwardBtn
+local history = {}
+local historyPointer = nil
+
+function pushHistory(recipeId, x, y, z)
+    debug.info:print("historyPointer",historyPointer, "#history",#history, "recipeId",recipeId, "x",x, "y",y, "z",z)
+    if history then debug.trace:dump(history) end
+
+    -- ignore dupe IDs
+    if history and history[historyPointer] == recipeId then return end
+
+    if not historyPointer then
+        historyPointer = 0
+    end
+    historyPointer = historyPointer + 1
+    arrayTruncate(history, historyPointer)
+    history[historyPointer] = recipeId
+
+    if history then debug.trace:dump(history) end
+
+    updateButtonStates()
+end
+
+function arrayTruncate(array, n)
+    if n ~= #array then
+        for i = #array, n, -1 do
+            array[i] = nil
+        end
+    end
+end
+
+function historyRewind()
+    debug.info:print("historyPointer",historyPointer, "#history",#history)
+    if history then debug.trace:dump(history) end
+
+    historyPointer = historyPointer - 1
+
+    if not historyPointer or historyPointer < 1 then
+        historyPointer = 0
+        return nil
+    end
+
+    local result = history[historyPointer]
+    openRecipe(result)
+    play(SND.KEYPRESS)
+    updateButtonStates()
+    return result
+end
+
+function historyForward()
+    debug.info:print("historyPointer",historyPointer, "#history",#history)
+    if history then debug.trace:dump(history) end
+
+    if not historyPointer or historyPointer == #history then
+        return nil
+    end
+
+    historyPointer = historyPointer + 1
+
+    local result = history[historyPointer]
+    openRecipe(result)
+    play(SND.ENTER)
+    updateButtonStates()
+    return result
+end
+
+function openRecipe(recipeId)
+    if not recipeId then return end
+    C_TradeSkillUI.OpenRecipe(recipeId)
+end
+
+-------------------------------------------------------------------------------
+-- Naqvigation "Back" and "Forward" Buttons
+-------------------------------------------------------------------------------
+
+local pi = 3.14159265359
+local p90 = pi / 2
+local p270 = 3 * pi / 2
+
+function createNavButtons()
+    local backBtnFrameName = ADDON_NAME .. "_BackBtn"
+    backBtn = _G[backBtnFrameName]
+    if backBtn then -- we've already made it
+        return
+    end
+
+    backBtn = makeNavButton("BackBtn")
+    forwardBtn = makeNavButton("FrontBtn", backBtn)
+
+end
+
+function makeNavButton(name, previousBtn)
+    name = ADDON_NAME .. name
+    local btn = _G[name]
+    if btn then -- we've already made it
+        return
+    end
+
+    local blizProfWindow = ProfessionsFrame
+    local blizIconFrame = ProfessionsFramePortrait
+    assert(blizIconFrame, "can't find ProfessionsFramePortrait")
+
+    local isForwardButton = previousBtn and true or false
+
+    btn = CreateFrame("Button", name,  blizProfWindow, "UIPanelScrollUpButtonTemplate")
+    btn:SetPoint("BOTTOMLEFT", previousBtn or blizIconFrame, "BOTTOMRIGHT", 0, 0)
+    btn:SetFrameStrata(blizProfWindow:GetFrameStrata())
+    btn:SetFrameLevel(blizProfWindow:GetFrameLevel()+1 )
+    btn:RegisterForClicks("AnyUp")
+
+    local rotation = isForwardButton and p270 or p90
+    btn.Normal:SetRotation(rotation)
+    btn.Pushed:SetRotation(rotation)
+    btn.Disabled:SetRotation(rotation)
+    btn.Highlight:SetRotation(rotation)
+
+    local callback = isForwardButton and historyForward or historyRewind
+    btn:SetScript("OnClick", callback)
+    btn:SetEnabled(false)
+    btn:Show()
+
+    return btn
+end
+
+function updateButtonStates()
+    local canBack = historyPointer and historyPointer > 1
+    local canForward = historyPointer and historyPointer < #history
+    backBtn:SetEnabled(canBack)
+    forwardBtn:SetEnabled(canForward)
+    debug.trace:print("canBack",canBack, "canForward",canForward)
+end
+
 
 -------------------------------------------------------------------------------
 -- CraftyNav utils
@@ -330,19 +486,26 @@ end
 -- Tradeskill UI initialization
 -------------------------------------------------------------------------------
 
-function initProfessionsFrame()
+function handleRecipeListPick(o, node, isSelected)
+    if not isSelected then return end
     fixHeader()
     fixReagents()
+    local recipe = node and node.data and node.data.recipeInfo and node.data.recipeInfo.recipeID
+    if recipe then
+        pushHistory(recipe)
+    end
 end
 
 -------------------------------------------------------------------------------
 -- Addon Lifecycle
 -------------------------------------------------------------------------------
 
+
 function initalizeAddonStuff()
     TooltipDataProcessor.AddTooltipPostCall(Enum.TooltipDataType.Item, addHelpTextToToolTip) -- TooltipDataProcessor.AllTypes
     ProfessionsFrame.CraftingPage:HookScript("OnShow", initProfData)
-    ProfessionsFrame.CraftingPage.RecipeList.selectionBehavior:RegisterCallback("OnSelectionChanged", initProfessionsFrame, ProfessionsFrame.CraftingPage)
+    ProfessionsFrame.CraftingPage.RecipeList.selectionBehavior:RegisterCallback("OnSelectionChanged", handleRecipeListPick)
+    createNavButtons()
 end
 
 -------------------------------------------------------------------------------
