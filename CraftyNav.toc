@@ -1,11 +1,12 @@
-## Interface: 100200
-## Version: 10.2.0
+## Version: 11.0.0
+## Interface: 100207,110000,110002
 ## Title: CraftyNav
 ## Author: Scott Ingram
 ## IconTexture: Interface\Icons\inv_10_dungeonjewelry_explorer_trinket_1compass_color1
-## Notes: A right click on a reagent in your crafting panel will jump to the reagent's recipe page, etc.
+## Notes: A right click on a reagent in your crafting panel will jump to the reagent's recipe page, etc.  Also: history buttons!
 
 Debug.lua
+History.lua
 CraftyNav.lua
 locales.xml
 

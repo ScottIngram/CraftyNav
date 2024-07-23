@@ -2,25 +2,6 @@ local ADDON_NAME, CraftyNav = ...
 local debug = CraftyNav.DEBUG.newDebugger(CraftyNav.DEBUG.ERROR)
 
 -------------------------------------------------------------------------------
--- Constants
--------------------------------------------------------------------------------
-
-CraftyNav.CONSTANTS = {
-    IS_HOOKED = ADDON_NAME ..".IS_HOOKED",
-    RECIPE_ID = ADDON_NAME ..".RECIPE_ID",
-}
-local CONSTANTS = CraftyNav.CONSTANTS
-
--------------------------------------------------------------------------------
--- CraftyNav Data
--------------------------------------------------------------------------------
-
-CraftyNav.NAMESPACE = {}
-CraftyNav.EventHandlers = {}
-CraftyNav.itemToRecipeIdMapping = {}
-CraftyNav.originalScripts = {}
-
--------------------------------------------------------------------------------
 -- Namespace Manipulation
 --
 -- Leverage Lua's setfenv to restrict all of my declarations to my own private "namespace"
@@ -28,14 +9,36 @@ CraftyNav.originalScripts = {}
 -------------------------------------------------------------------------------
 
 local _G = _G -- but first, grab the global namespace or else we lose it
-setmetatable(CraftyNav.NAMESPACE, { __index = _G }) -- inherit all member of the Global namespace
-setfenv(1, CraftyNav.NAMESPACE)
+setmetatable(CraftyNav, { __index = _G }) -- inherit all member of the Global namespace
+setfenv(1, CraftyNav)
+
+-------------------------------------------------------------------------------
+-- Constants
+-------------------------------------------------------------------------------
+
+local CONSTANTS = {
+    IS_HOOKED = ADDON_NAME ..".IS_HOOKED",
+    RECIPE_ID = ADDON_NAME ..".RECIPE_ID",
+}
+local PI = 3.14159265359
+local DEGREES_90 = PI / 2
+local DEGREES_270 = 3 * PI / 2
+
+-------------------------------------------------------------------------------
+-- CraftyNav Data
+-------------------------------------------------------------------------------
+
+local itemToRecipeIdMapping = {}
+local originalScripts = {}
+---@type History
+local history
+local backBtn, fwrdBtn
 
 -------------------------------------------------------------------------------
 -- Event Handlers
 -------------------------------------------------------------------------------
 
-local EventHandlers = CraftyNav.EventHandlers -- just for shorthand
+local EventHandlers = {}
 
 function EventHandlers:ADDON_LOADED(addonName)
     if addonName == ADDON_NAME then
@@ -100,29 +103,29 @@ end
 
 function CraftyNav:isProfessionDataInitialized(professionName)
     assert(professionName)
-    return (self.itemToRecipeIdMapping[professionName] and true) or false
+    return (itemToRecipeIdMapping[professionName] and true) or false
 end
 
 function CraftyNav:getRecipeId(professionName, itemID)
-    local map = self.itemToRecipeIdMapping[professionName]
+    local map = itemToRecipeIdMapping[professionName]
     if (not map) then return end
     return map[itemID]
 end
 
 function CraftyNav:addRecipeId(professionName, itemID, recipeId)
-    self.itemToRecipeIdMapping[professionName][itemID] = recipeId
+    itemToRecipeIdMapping[professionName][itemID] = recipeId
 end
 
 function CraftyNav:createItemToRecipeIdMapping()
     if (not isTradeSkillUiReady()) then return end
     local professionName = C_TradeSkillUI.GetBaseProfessionInfo().professionName
-    if (self.itemToRecipeIdMapping[professionName]) then
+    if (itemToRecipeIdMapping[professionName]) then
         debug.trace:print("Already scanned so skipping: "..professionName)
         return
     end
     debug.info:print("Initializing "..professionName)
 
-    self.itemToRecipeIdMapping[professionName] = {}
+    itemToRecipeIdMapping[professionName] = {}
     local recipeIds = C_TradeSkillUI.GetAllRecipeIDs()
 
     for i, recipeId in ipairs(recipeIds) do
@@ -165,13 +168,13 @@ function isMyHook(frame, scriptName, myHook)
 end
 
 function CraftyNav:rememberCurrentScript(frame, scriptName)
-    vivify(self.originalScripts, frame, scriptName)
-    self.originalScripts[frame][scriptName] = frame:GetScript(scriptName)
+    vivify(originalScripts, frame, scriptName)
+    originalScripts[frame][scriptName] = frame:GetScript(scriptName)
 end
 
 function CraftyNav:callPreviousCallback(frame, scriptName)
-    local func = self.originalScripts[frame][scriptName]
-    func(headerBtn)
+    local func = originalScripts[frame][scriptName]
+    func(frame)
 end
 
 -------------------------------------------------------------------------------
@@ -215,9 +218,8 @@ function headerCallbackForPostClick(headerBtn, whichMouseButtonStr, isPressed)
     debug.info:out("#",7, "You PostClicked me with", "whichMouseButtonStr", whichMouseButtonStr, "name",name)
     local isRightClick = (whichMouseButtonStr == "RightButton")
     if (name and isRightClick) then
-        ProfessionsFrame.CraftingPage.RecipeList.SearchBox:SetText(name)
-        C_TradeSkillUI.SetRecipeItemNameFilter(name)
-        PlaySound(SOUNDKIT.UI_PROFESSION_FILTER_MENU_OPEN_CLOSE);
+        setSearchBox(name)
+        play(SND.PUFF)
     end
 end
 
@@ -240,6 +242,11 @@ function headerCallbackForOnLeave(headerBtn)
     debug.info:out("#",7, "LEAVE header!")
     global_craft_header_bonus_tooltip_text = nil
     CraftyNav:callPreviousCallback(headerBtn, "OnLeave")
+end
+
+function setSearchBox(term)
+    ProfessionsFrame.CraftingPage.RecipeList.SearchBox:SetText(term or "")
+    C_TradeSkillUI.SetRecipeItemNameFilter(term)
 end
 
 -------------------------------------------------------------------------------
@@ -299,11 +306,10 @@ function reagentCallbackForPostClick(reagentBtn, whichMouseButtonStr, isPressed)
     local isRightClick = (whichMouseButtonStr == "RightButton")
     debug.info:out(">",7, "You PostClicked me with", "whichMouseButtonStr", whichMouseButtonStr, "recipeIdFromButton",recipeIdFromButton, "isRightClick",isRightClick)
     if (recipeIdFromButton and isRightClick) then
-        ProfessionsFrame.CraftingPage.RecipeList.SearchBox:SetText("")
-        C_TradeSkillUI.SetRecipeItemNameFilter(nil)
-        PlaySound(SOUNDKIT.UI_PROFESSION_FILTER_MENU_OPEN_CLOSE);
+        setSearchBox(nil)
+        play(SND.PUFF)
         C_TradeSkillUI.OpenRecipe(recipeIdFromButton)
-        pushHistory(recipeIdFromButton)
+        history:push(recipeIdFromButton)
     end
 end
 
@@ -320,6 +326,7 @@ end
 
 ---@class SND
 SND = {
+    PUFF     = SOUNDKIT.UI_PROFESSION_FILTER_MENU_OPEN_CLOSE,
     DELETE   = SOUNDKIT.IG_CHAT_SCROLL_UP,
     KEYPRESS = SOUNDKIT.IG_MINIMAP_ZOOM_IN, -- IG_CHAT_SCROLL_DOWN
     ENTER    = SOUNDKIT.IG_CHAT_BOTTOM,
@@ -333,98 +340,13 @@ SND = {
 play = PlaySound
 
 -------------------------------------------------------------------------------
--- Naqvigation History & array routines
--------------------------------------------------------------------------------
-
-local backBtn, forwardBtn
-local history = {}
-local historyPointer = nil
-
-function pushHistory(recipeId, x, y, z)
-    debug.info:print("historyPointer",historyPointer, "#history",#history, "recipeId",recipeId, "x",x, "y",y, "z",z)
-    if history then debug.trace:dump(history) end
-
-    -- ignore dupe IDs
-    if history and history[historyPointer] == recipeId then return end
-
-    if not historyPointer then
-        historyPointer = 0
-    end
-    historyPointer = historyPointer + 1
-    arrayTruncate(history, historyPointer)
-    history[historyPointer] = recipeId
-
-    if history then debug.trace:dump(history) end
-
-    updateButtonStates()
-end
-
-function arrayTruncate(array, n)
-    if n ~= #array then
-        for i = #array, n, -1 do
-            array[i] = nil
-        end
-    end
-end
-
-function historyRewind()
-    debug.info:print("historyPointer",historyPointer, "#history",#history)
-    if history then debug.trace:dump(history) end
-
-    historyPointer = historyPointer - 1
-
-    if not historyPointer or historyPointer < 1 then
-        historyPointer = 0
-        return nil
-    end
-
-    local result = history[historyPointer]
-    openRecipe(result)
-    play(SND.KEYPRESS)
-    updateButtonStates()
-    return result
-end
-
-function historyForward()
-    debug.info:print("historyPointer",historyPointer, "#history",#history)
-    if history then debug.trace:dump(history) end
-
-    if not historyPointer or historyPointer == #history then
-        return nil
-    end
-
-    historyPointer = historyPointer + 1
-
-    local result = history[historyPointer]
-    openRecipe(result)
-    play(SND.ENTER)
-    updateButtonStates()
-    return result
-end
-
-function openRecipe(recipeId)
-    if not recipeId then return end
-    C_TradeSkillUI.OpenRecipe(recipeId)
-end
-
--------------------------------------------------------------------------------
 -- Naqvigation "Back" and "Forward" Buttons
 -------------------------------------------------------------------------------
 
-local pi = 3.14159265359
-local p90 = pi / 2
-local p270 = 3 * pi / 2
-
 function createNavButtons()
-    local backBtnFrameName = ADDON_NAME .. "_BackBtn"
-    backBtn = _G[backBtnFrameName]
-    if backBtn then -- we've already made it
-        return
-    end
-
+    history = History:new()
     backBtn = makeNavButton("BackBtn")
-    forwardBtn = makeNavButton("FrontBtn", backBtn)
-
+    fwrdBtn = makeNavButton("FrontBtn", backBtn)
 end
 
 function makeNavButton(name, previousBtn)
@@ -434,10 +356,9 @@ function makeNavButton(name, previousBtn)
         return
     end
 
+    assert(ProfessionsFramePortrait, "can't find ProfessionsFramePortrait to anchor the nav buttons.")
     local blizProfWindow = ProfessionsFrame
     local blizIconFrame = ProfessionsFramePortrait
-    assert(blizIconFrame, "can't find ProfessionsFramePortrait")
-
     local isForwardButton = previousBtn and true or false
 
     btn = CreateFrame("Button", name,  blizProfWindow, "UIPanelScrollUpButtonTemplate")
@@ -446,7 +367,7 @@ function makeNavButton(name, previousBtn)
     btn:SetFrameLevel(blizProfWindow:GetFrameLevel()+1 )
     btn:RegisterForClicks("AnyUp")
 
-    local rotation = isForwardButton and p270 or p90
+    local rotation = isForwardButton and DEGREES_270 or DEGREES_90
     btn.Normal:SetRotation(rotation)
     btn.Pushed:SetRotation(rotation)
     btn.Disabled:SetRotation(rotation)
@@ -460,14 +381,28 @@ function makeNavButton(name, previousBtn)
     return btn
 end
 
-function updateButtonStates()
-    local canBack = historyPointer and historyPointer > 1
-    local canForward = historyPointer and historyPointer < #history
-    backBtn:SetEnabled(canBack)
-    forwardBtn:SetEnabled(canForward)
-    debug.trace:print("canBack",canBack, "canForward",canForward)
+function historyRewind()
+    local result = history:rewind()
+    if not result then return end
+    setSearchBox(nil)
+    openRecipe(result)
+    play(SND.KEYPRESS)
+    updateButtonStates()
 end
 
+function historyForward()
+    local result = history:forward()
+    if not result then return end
+    setSearchBox(nil)
+    openRecipe(result)
+    play(SND.ENTER)
+    updateButtonStates()
+end
+
+function updateButtonStates()
+    backBtn:SetEnabled( history:canRewind() )
+    fwrdBtn:SetEnabled( history:canForward() )
+end
 
 -------------------------------------------------------------------------------
 -- CraftyNav utils
@@ -482,6 +417,11 @@ function vivify(matrix, x, y)
     return matrix
 end
 
+function openRecipe(recipeId)
+    if not recipeId then return end
+    C_TradeSkillUI.OpenRecipe(recipeId)
+end
+
 -------------------------------------------------------------------------------
 -- Tradeskill UI initialization
 -------------------------------------------------------------------------------
@@ -492,7 +432,8 @@ function handleRecipeListPick(o, node, isSelected)
     fixReagents()
     local recipe = node and node.data and node.data.recipeInfo and node.data.recipeInfo.recipeID
     if recipe then
-        pushHistory(recipe)
+        history:push(recipe)
+        updateButtonStates()
     end
 end
 
@@ -500,8 +441,8 @@ end
 -- Addon Lifecycle
 -------------------------------------------------------------------------------
 
-
 function initalizeAddonStuff()
+    assert(ProfessionsFrame, "can't find the ProfessionsFrame object")
     TooltipDataProcessor.AddTooltipPostCall(Enum.TooltipDataType.Item, addHelpTextToToolTip) -- TooltipDataProcessor.AllTypes
     ProfessionsFrame.CraftingPage:HookScript("OnShow", initProfData)
     ProfessionsFrame.CraftingPage.RecipeList.selectionBehavior:RegisterCallback("OnSelectionChanged", handleRecipeListPick)
@@ -512,5 +453,5 @@ end
 -- OK, Go for it!
 -------------------------------------------------------------------------------
 
-createEventListener(CraftyNav, CraftyNav.EventHandlers)
+createEventListener(CraftyNav, EventHandlers)
 
