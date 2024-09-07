@@ -246,6 +246,20 @@ end
 
 function setSearchBox(term)
     ProfessionsFrame.CraftingPage.RecipeList.SearchBox:SetText(term or "")
+
+    -- clear all filters.  that would be a useful API if it existed, huh?  Well fuck you very much
+    C_TradeSkillUI.ClearInventorySlotFilter()
+    C_TradeSkillUI.ClearRecipeCategoryFilter()
+    C_TradeSkillUI.ClearRecipeSourceTypeFilter()
+    C_TradeSkillUI.SetOnlyShowAvailableForOrders(false)
+    C_TradeSkillUI.SetOnlyShowFirstCraftRecipes(false)
+    C_TradeSkillUI.SetOnlyShowMakeableRecipes(false)
+    C_TradeSkillUI.SetOnlyShowSkillUpRecipes(false)
+    C_TradeSkillUI.SetRecipeItemLevelFilter(0,9999)
+    C_TradeSkillUI.SetShowLearned(true)
+    C_TradeSkillUI.SetShowUnlearned(true)
+
+    -- now we can search unfettered
     C_TradeSkillUI.SetRecipeItemNameFilter(term)
 end
 
