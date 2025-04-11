@@ -85,8 +85,9 @@ end
 -- Tradeskill Utility Functions and Methods
 -------------------------------------------------------------------------------
 
-function initProfData()
+function initWhenOnShow()
     CraftyNav:createItemToRecipeIdMapping()
+    handlePick(ProfessionsFrame.CraftingPage, nil)
 end
 
 function isTradeSkillUiReady()
@@ -182,8 +183,8 @@ end
 -- add nav clicks and tooltipy OnEnter enhancements
 -------------------------------------------------------------------------------
 
-function fixHeader()
-    local headerBtn = ProfessionsFrame.CraftingPage.SchematicForm.OutputIcon
+function fixHeader(pathToRecipeDisplay)
+    local headerBtn = pathToRecipeDisplay.SchematicForm.OutputIcon
     if (headerBtn) then
         debug.info:out("#",5, "header checking callbacks")
 
@@ -268,15 +269,15 @@ end
 -- add nav clicks and tooltipy OnEnter enhancements
 -------------------------------------------------------------------------------
 
-function fixReagents()
+function fixReagents(pathToRecipeDisplay)
     CraftyNav:createItemToRecipeIdMapping() -- workaround for OnShow not firing when switching between professions (see above)
     local professionName = getCurrentProfessionName()
     if (not CraftyNav:isProfessionDataInitialized(professionName)) then return end
 
-    local reagentTree = ProfessionsFrame.CraftingPage.SchematicForm.Reagents:GetLayoutChildren()
-    for i, reagent in ipairs(reagentTree) do
-        local reagentBtn = reagent.Button
-        local craftInfo = reagent.reagentSlotSchematic
+    local reagentFrames = pathToRecipeDisplay.SchematicForm.Reagents:GetLayoutChildren()
+    for i, reagentFrame in ipairs(reagentFrames) do
+        local reagentBtn = reagentFrame.Button
+        local craftInfo = reagentFrame.reagentSlotSchematic
 
         -- PROBLEM:
         -- I was expecting each new recipe refresh to instantiate fresh buttons.
@@ -286,6 +287,8 @@ function fixReagents()
         -- but do not rely on closure scoping
         -- instead store the recipeId in the button in a named field
         -- and have the callback refer to it that way
+
+        -- TODO: simplify this so that we lookup the recipeId inside the callbacks instead of storing it on the reagentBtn
 
         if (reagentBtn and craftInfo) then
             local itemID = craftInfo.reagents[1].itemID
@@ -320,9 +323,7 @@ function reagentCallbackForPostClick(reagentBtn, whichMouseButtonStr, isPressed)
     local isRightClick = (whichMouseButtonStr == "RightButton")
     debug.info:out(">",7, "You PostClicked me with", "whichMouseButtonStr", whichMouseButtonStr, "recipeIdFromButton",recipeIdFromButton, "isRightClick",isRightClick)
     if (recipeIdFromButton and isRightClick) then
-        setSearchBox(nil)
-        play(SND.PUFF)
-        C_TradeSkillUI.OpenRecipe(recipeIdFromButton)
+        openRecipe(recipeIdFromButton, SND.ENTER)
         history:push(recipeIdFromButton)
     end
 end
@@ -398,18 +399,14 @@ end
 function historyRewind()
     local result = history:rewind()
     if not result then return end
-    setSearchBox(nil)
-    openRecipe(result)
-    play(SND.KEYPRESS)
+    openRecipe(result, SND.KEYPRESS)
     updateButtonStates()
 end
 
 function historyForward()
     local result = history:forward()
     if not result then return end
-    setSearchBox(nil)
-    openRecipe(result)
-    play(SND.ENTER)
+    openRecipe(result, SND.ENTER)
     updateButtonStates()
 end
 
@@ -431,19 +428,39 @@ function vivify(matrix, x, y)
     return matrix
 end
 
-function openRecipe(recipeId)
+function openRecipe(recipeId, snd)
     if not recipeId then return end
+
+    ProfessionsFrame:SetTab(ProfessionsFrame.recipesTabID) -- jump to the recipes tab
+    setSearchBox(nil)
     C_TradeSkillUI.OpenRecipe(recipeId)
+    play(snd or SND.KEYPRESS)
+
+    -- Or...
+    --local recipeInfo = C_TradeSkillUI.GetRecipeInfo(recipeId);
+    --EventRegistry:TriggerEvent("ProfessionsRecipeListMixin.Event.OnRecipeSelected", recipeInfo, nilRecipeList);
 end
 
 -------------------------------------------------------------------------------
 -- Tradeskill UI initialization
+--
+-- handle the recipe display panel which can appear in both of these locations:
+-- ProfessionsFrame.CraftingPage.SchematicForm
+-- ProfessionsFrame.OrdersPage.OrderView.OrderDetails.SchematicForm
 -------------------------------------------------------------------------------
 
-function handleRecipeListPick(o, node, isSelected)
-    if not isSelected then return end
-    fixHeader()
-    fixReagents()
+function handleRecipeListPick(someNumberProllyIndex, node, isSelected)
+    handlePick(ProfessionsFrame.CraftingPage, node)
+end
+
+function handleOrderListPick(frame)
+    handlePick(ProfessionsFrame.OrdersPage.OrderView.OrderDetails, frame)
+end
+
+function handlePick(pathToRecipeDisplay, node)
+    fixHeader(pathToRecipeDisplay)
+    fixReagents(pathToRecipeDisplay)
+    if not node then return end
     local recipe = node and node.data and node.data.recipeInfo and node.data.recipeInfo.recipeID
     if recipe then
         history:push(recipe)
@@ -457,9 +474,19 @@ end
 
 function initalizeAddonStuff()
     assert(ProfessionsFrame, "can't find the ProfessionsFrame object")
+    CraftyNav:createItemToRecipeIdMapping() -- can't assume OnSelectionChanged will happen before a recipe is displayed
+
     TooltipDataProcessor.AddTooltipPostCall(Enum.TooltipDataType.Item, addHelpTextToToolTip) -- TooltipDataProcessor.AllTypes
-    ProfessionsFrame.CraftingPage:HookScript("OnShow", initProfData)
+
+    -- initialize the initializers.
+    -- create event listeners (for OnShow & Selections) that will in-turn...
+    -- then create/reinitialize the necessary click handlers which will...
+    -- then perform the actual navigation.
+    ProfessionsFrame.CraftingPage:HookScript("OnShow", initWhenOnShow)
     ProfessionsFrame.CraftingPage.RecipeList.selectionBehavior:RegisterCallback("OnSelectionChanged", handleRecipeListPick)
+    ProfessionsFrame.OrdersPage.OrderView:HookScript("OnShow", handleOrderListPick)
+
+    -- forward / back buttons
     createNavButtons()
 end
 
