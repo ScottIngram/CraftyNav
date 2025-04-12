@@ -107,7 +107,8 @@ function CraftyNav:isProfessionDataInitialized(professionName)
     return (itemToRecipeIdMapping[professionName] and true) or false
 end
 
-function CraftyNav:getRecipeId(professionName, itemID)
+function CraftyNav:getRecipeId(itemID)
+    local professionName = C_TradeSkillUI.GetBaseProfessionInfo().professionName
     local map = itemToRecipeIdMapping[professionName]
     if (not map) then return end
     return map[itemID]
@@ -120,19 +121,35 @@ end
 function CraftyNav:createItemToRecipeIdMapping()
     if (not isTradeSkillUiReady()) then return end
     local professionName = C_TradeSkillUI.GetBaseProfessionInfo().professionName
-    if (itemToRecipeIdMapping[professionName]) then
+    local tblCheck = itemToRecipeIdMapping[professionName]
+    local isEmpty = isEmptyTable(tblCheck)
+    local isBroken = tblCheck and isEmpty
+    if (tblCheck and isTableNotEmpty(tblCheck)) then
         debug.trace:print("Already scanned so skipping: "..professionName)
         return
+    elseif isBroken then
+        debug.trace:print("BROKEN DATA... rescanning: "..professionName)
     end
-    debug.info:print("Initializing "..professionName)
+    debug.info:print("Initializing ",professionName, "tblCheck",tblCheck, "isEmpty",isEmpty)
 
     itemToRecipeIdMapping[professionName] = {}
     local recipeIds = C_TradeSkillUI.GetAllRecipeIDs()
+    if isEmptyTable(recipeIds) then
+        debug.info:print("NO recipeIds!")
+    end
 
+    local n = 0
     for i, recipeId in ipairs(recipeIds) do
         local foo = C_TradeSkillUI.GetRecipeOutputItemData(recipeId)
         local itemID = foo and foo.itemID
-        if (itemID) then self:addRecipeId(professionName,itemID,recipeId) end
+        if (itemID) then
+            self:addRecipeId(professionName,itemID,recipeId)
+            n = n + 1
+        end
+    end
+
+    if n == 0 then
+        debug.info:print("NO recipeIds matched to any itemIDs!")
     end
 end
 
@@ -292,15 +309,17 @@ function fixReagents(pathToRecipeDisplay)
 
         if (reagentBtn and craftInfo) then
             local itemID = craftInfo.reagents[1].itemID
-            local recipeId = CraftyNav:getRecipeId(professionName, itemID)
+            local recipeId = CraftyNav:getRecipeId(itemID)
             debug.info:out(">",5, "BUTTON", "i", i, "itemID",itemID, "recipeId",recipeId, "buttonLabel", buttonLabel)
             reagentBtn[CONSTANTS.RECIPE_ID] = recipeId
-            if recipeId then
+            if true or recipeId then
 
                 -- PostClick
                 if not isMyHook(reagentBtn, "PostClick", reagentCallbackForPostClick) then
                     debug.info:out("#",7, "reagent SetScript PostClick")
                     reagentBtn:SetScript("PostClick", reagentCallbackForPostClick)
+                else
+                    debug.info:out("#",9, "reagent SetScript PostClick - already exists")
                 end
 
                 -- OnEnter
@@ -308,6 +327,8 @@ function fixReagents(pathToRecipeDisplay)
                     debug.info:out("#",7, "reagent SetScript OnEnter", "reagentBtn",reagentBtn)
                     CraftyNav:rememberCurrentScript(reagentBtn, "OnEnter")
                     reagentBtn:SetScript("OnEnter", reagentCallbackForOnEnter)
+                else
+                    debug.info:out("#",9, "reagent SetScript OnEnter - already exists")
                 end
             end
         end
@@ -318,13 +339,29 @@ end
 -- Callbacks for Tradeskill Reagent Buttons
 -------------------------------------------------------------------------------
 
+function isTableNotEmpty(table)
+    return table and ( next(table) )
+end
+
+function isEmptyTable(table)
+    return not isTableNotEmpty(table)
+end
+
 function reagentCallbackForPostClick(reagentBtn, whichMouseButtonStr, isPressed)
-    local recipeIdFromButton = reagentBtn[CONSTANTS.RECIPE_ID]
-    local isRightClick = (whichMouseButtonStr == "RightButton")
-    debug.info:out(">",7, "You PostClicked me with", "whichMouseButtonStr", whichMouseButtonStr, "recipeIdFromButton",recipeIdFromButton, "isRightClick",isRightClick)
-    if (recipeIdFromButton and isRightClick) then
-        openRecipe(recipeIdFromButton, SND.ENTER)
-        history:push(recipeIdFromButton)
+    debug.info:out("=",7, "reagentBtn",reagentBtn, "whichMouseButtonStr",whichMouseButtonStr, "isPressed",isPressed)
+    if not whichMouseButtonStr == "RightButton" then return end
+
+    local reagentFrame = reagentBtn:GetParent()
+    local craftInfo = reagentFrame.reagentSlotSchematic
+    local itemId = craftInfo.reagents[1].itemID
+    local recipeId = CraftyNav:getRecipeId(itemId)
+
+    debug.info:out("=",7, "You PostClicked me with", "itemId",itemId, "recipeId", recipeId)
+    if recipeId then
+        openRecipe(recipeId, SND.ENTER)
+        history:push(recipeId)
+    else
+        debug.info:dump(itemToRecipeIdMapping)
     end
 end
 
