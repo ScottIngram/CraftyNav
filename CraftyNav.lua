@@ -329,10 +329,11 @@ function reagentCallbackForPostClick(reagentBtn, whichMouseButtonStr, isPressed)
     debug.info:out("=",7, "Hi :-)", "reagentBtn",debugLabel, "whichMouseButtonStr",whichMouseButtonStr, "isPressed",isPressed)
     if whichMouseButtonStr ~= "RightButton" then return end
 
+    CraftyNav:createItemToRecipeIdMapping()
 
     local reagentFrame = reagentBtn:GetParent()
     local craftInfo = reagentFrame.reagentSlotSchematic
-    local itemId = craftInfo.reagents[1].itemID
+    local itemId = craftInfo and craftInfo.reagents[1].itemID
     local recipeId = CraftyNav:getRecipeId(itemId)
 
     debug.info:out("=",7, "You PostClicked me with", "itemId",itemId, "recipeId", recipeId)
