@@ -65,7 +65,7 @@ end
 -------------------------------------------------------------------------------
 
 function createEventListener(targetSelfAsProxy, eventHandlers)
-    debug.info:print(ADDON_NAME .. " EventListener:Activate() ...")
+    debug.info:print(ADDON_NAME, " EventListener:Activate() ...")
 
     local dispatcher = function(listenerFrame, eventName, ...)
         -- ignore the listenerFrame and instead
@@ -76,7 +76,7 @@ function createEventListener(targetSelfAsProxy, eventHandlers)
     eventListenerFrame:SetScript("OnEvent", dispatcher)
 
     for eventName, _ in pairs(eventHandlers) do
-        debug.info:print("EventListener:activate() - registering " .. eventName)
+        debug.info:print("EventListener:activate() - registering ", eventName)
         eventListenerFrame:RegisterEvent(eventName)
     end
 end
@@ -85,15 +85,10 @@ end
 -- Tradeskill Utility Functions and Methods
 -------------------------------------------------------------------------------
 
-function initWhenOnShow()
-    CraftyNav:createItemToRecipeIdMapping()
-    handlePick(ProfessionsFrame.CraftingPage, nil)
-end
-
 function isTradeSkillUiReady()
     local isReady = C_TradeSkillUI.IsTradeSkillReady()
     local professionName = C_TradeSkillUI.GetBaseProfessionInfo().professionName or "UNKNOWN"
-    debug.info:print(professionName.." C_TradeSkillUI.IsTradeSkillReady() = "..tostring(isReady))
+    debug.info:print(professionName, " C_TradeSkillUI.IsTradeSkillReady() = ", tostring(isReady))
     return isReady
 end
 
@@ -125,10 +120,10 @@ function CraftyNav:createItemToRecipeIdMapping()
     local isEmpty = isEmptyTable(tblCheck)
     local isBroken = tblCheck and isEmpty
     if (tblCheck and isTableNotEmpty(tblCheck)) then
-        debug.trace:print("Already scanned so skipping: "..professionName)
+        debug.trace:print("Already scanned so skipping: ", professionName)
         return
     elseif isBroken then
-        debug.trace:print("BROKEN DATA... rescanning: "..professionName)
+        debug.trace:print("BROKEN DATA... rescanning: ", professionName)
     end
     debug.info:print("Initializing ",professionName, "tblCheck",tblCheck, "isEmpty",isEmpty)
 
@@ -200,30 +195,30 @@ end
 -- add nav clicks and tooltipy OnEnter enhancements
 -------------------------------------------------------------------------------
 
-function fixHeader(pathToRecipeDisplay)
+function hookHeader(pathToRecipeDisplay)
     local headerBtn = pathToRecipeDisplay.SchematicForm.OutputIcon
-    if (headerBtn) then
-        debug.info:out("#",5, "header checking callbacks")
+    if not headerBtn then return end
 
-        -- PostClick
-        if not isMyHook(headerBtn, "PostClick", headerCallbackForPostClick) then
-            debug.info:out("#",7, "header SetScript PostClick")
-            headerBtn:SetScript("PostClick", headerCallbackForPostClick)
-        end
+    debug.info:out("#",5, "header checking callbacks")
 
-        -- OnEnter
-        if not isMyHook(headerBtn, "OnEnter", headerCallbackForOnEnter) then
-            debug.info:out("#",7, "header SetScript OnEnter","headerBtn",headerBtn)
-            CraftyNav:rememberCurrentScript(headerBtn, "OnEnter")
-            headerBtn:SetScript("OnEnter", headerCallbackForOnEnter)
-        end
+    -- PostClick
+    if not isMyHook(headerBtn, "PostClick", headerCallbackForPostClick) then
+        debug.info:out("#",7, "header SetScript PostClick")
+        headerBtn:SetScript("PostClick", headerCallbackForPostClick)
+    end
 
-        -- OnLeave
-        if not isMyHook(headerBtn, "OnLeave", headerCallbackForOnLeave) then
-            debug.info:out("#",7, "header SetScript OnLeave","headerBtn",headerBtn)
-            CraftyNav:rememberCurrentScript(headerBtn, "OnLeave")
-            headerBtn:SetScript("OnLeave", headerCallbackForOnLeave)
-        end
+    -- OnEnter
+    if not isMyHook(headerBtn, "OnEnter", headerCallbackForOnEnter) then
+        debug.info:out("#",7, "header SetScript OnEnter","headerBtn",headerBtn)
+        CraftyNav:rememberCurrentScript(headerBtn, "OnEnter")
+        headerBtn:SetScript("OnEnter", headerCallbackForOnEnter)
+    end
+
+    -- OnLeave
+    if not isMyHook(headerBtn, "OnLeave", headerCallbackForOnLeave) then
+        debug.info:out("#",7, "header SetScript OnLeave","headerBtn",headerBtn)
+        CraftyNav:rememberCurrentScript(headerBtn, "OnLeave")
+        headerBtn:SetScript("OnLeave", headerCallbackForOnLeave)
     end
 end
 
@@ -233,7 +228,7 @@ end
 
 function headerCallbackForPostClick(headerBtn, whichMouseButtonStr, isPressed)
     local name = ProfessionsFrame.CraftingPage.SchematicForm.recipeSchematic.name
-    debug.info:out("#",7, "You PostClicked me with", "whichMouseButtonStr", whichMouseButtonStr, "name",name)
+    debug.info:out("}",7, "You PostClicked me with", "whichMouseButtonStr", whichMouseButtonStr, "name",name)
     local isRightClick = (whichMouseButtonStr == "RightButton")
     if (name and isRightClick) then
         setSearchBox(name)
@@ -244,7 +239,7 @@ end
 function headerCallbackForOnEnter(headerBtn)
     local name = ProfessionsFrame.CraftingPage.SchematicForm.recipeSchematic.name
     local text = CraftyNav.L10N.TOOLTIP_HEADER .. name .. (CraftyNav.L10N.TOOLTIP_HEADER_POST or "")
-    debug.info:out("#",7, "Enter header!", "TOOLTIP_HEADER",text)
+    debug.info:out("]",7, "Enter header!", "TOOLTIP_HEADER",text)
 
     -- Unlike the callback for the Reagent Buttons which successfully used the following API calls, not here!
     -- No matter what order, nor matter how much I begged or cried, the following never affected the tooltip.
@@ -257,7 +252,7 @@ function headerCallbackForOnEnter(headerBtn)
 end
 
 function headerCallbackForOnLeave(headerBtn)
-    debug.info:out("#",7, "LEAVE header!")
+    debug.info:out("]",7, "LEAVE header!")
     global_craft_header_bonus_tooltip_text = nil
     CraftyNav:callPreviousCallback(headerBtn, "OnLeave")
 end
@@ -286,70 +281,54 @@ end
 -- add nav clicks and tooltipy OnEnter enhancements
 -------------------------------------------------------------------------------
 
-function fixReagents(pathToRecipeDisplay)
-    CraftyNav:createItemToRecipeIdMapping() -- workaround for OnShow not firing when switching between professions (see above)
-    local professionName = getCurrentProfessionName()
-    if (not CraftyNav:isProfessionDataInitialized(professionName)) then return end
-
+local rN = 0
+local rHookN = 0
+function hookReagents(pathToRecipeDisplay)
     local reagentFrames = pathToRecipeDisplay.SchematicForm.Reagents:GetLayoutChildren()
     for i, reagentFrame in ipairs(reagentFrames) do
         local reagentBtn = reagentFrame.Button
-        local craftInfo = reagentFrame.reagentSlotSchematic
 
-        -- PROBLEM:
-        -- I was expecting each new recipe refresh to instantiate fresh buttons.
-        -- but instead, the UI recycles buttons leaving my hooks intact, but now with stale closure data.
-        -- SOLUTION:
-        -- hook the code once (unless it gets clobbered, then reattach it)
-        -- but do not rely on closure scoping
-        -- instead store the recipeId in the button in a named field
-        -- and have the callback refer to it that way
+        if reagentBtn then
+            rN = rN + 1
 
-        -- TODO: simplify this so that we lookup the recipeId inside the callbacks instead of storing it on the reagentBtn
+            local debugLabel = reagentBtn:GetItemLink() or "UnKnOwN"
 
-        if (reagentBtn and craftInfo) then
-            local itemID = craftInfo.reagents[1].itemID
-            local recipeId = CraftyNav:getRecipeId(itemID)
-            debug.info:out(">",5, "BUTTON", "i", i, "itemID",itemID, "recipeId",recipeId, "buttonLabel", buttonLabel)
-            reagentBtn[CONSTANTS.RECIPE_ID] = recipeId
-            if true or recipeId then
+            -- PostClick
+            if not isMyHook(reagentBtn, "PostClick", reagentCallbackForPostClick) then
+                rHookN = rHookN + 1
+                debug.info:out("%",7, rN, "reagent SetScript hooking the PostClick", debugLabel)
+                reagentBtn:SetScript("PostClick", reagentCallbackForPostClick)
+            else
+                debug.info:out("%",9, rN, "reagent SetScript PostClick - already exists", debugLabel)
+            end
 
-                -- PostClick
-                if not isMyHook(reagentBtn, "PostClick", reagentCallbackForPostClick) then
-                    debug.info:out("#",7, "reagent SetScript PostClick")
-                    reagentBtn:SetScript("PostClick", reagentCallbackForPostClick)
-                else
-                    debug.info:out("#",9, "reagent SetScript PostClick - already exists")
-                end
-
-                -- OnEnter
-                if not isMyHook(reagentBtn, "OnEnter", reagentCallbackForOnEnter) then
-                    debug.info:out("#",7, "reagent SetScript OnEnter", "reagentBtn",reagentBtn)
-                    CraftyNav:rememberCurrentScript(reagentBtn, "OnEnter")
-                    reagentBtn:SetScript("OnEnter", reagentCallbackForOnEnter)
-                else
-                    debug.info:out("#",9, "reagent SetScript OnEnter - already exists")
-                end
+            -- OnEnter
+            if not isMyHook(reagentBtn, "OnEnter", reagentCallbackForOnEnter) then
+                rHookN = rHookN + 1
+                debug.info:out("%",7, rN, "reagent SetScript hooking the OnEnter", debugLabel)
+                CraftyNav:rememberCurrentScript(reagentBtn, "OnEnter")
+                reagentBtn:SetScript("OnEnter", reagentCallbackForOnEnter)
+            else
+                debug.info:out("%",9, rN, "reagent SetScript OnEnter - already exists", debugLabel)
             end
         end
     end
+    debug.info:out("%",15, "reagent SetScript found total of ", rN)
+    debug.info:out("%",15, "reagent SetScript hooked total of ", rHookN)
+
+    rN = 0
+    rHookN = 0
 end
 
 -------------------------------------------------------------------------------
 -- Callbacks for Tradeskill Reagent Buttons
 -------------------------------------------------------------------------------
 
-function isTableNotEmpty(table)
-    return table and ( next(table) )
-end
-
-function isEmptyTable(table)
-    return not isTableNotEmpty(table)
-end
-
 function reagentCallbackForPostClick(reagentBtn, whichMouseButtonStr, isPressed)
-    debug.info:out("=",7, "reagentBtn",reagentBtn, "whichMouseButtonStr",whichMouseButtonStr, "isPressed",isPressed)
-    if not whichMouseButtonStr == "RightButton" then return end
+    local debugLabel = reagentBtn:GetItemLink() or "UnKnOwN"
+    debug.info:out("=",7, "Hi :-)", "reagentBtn",debugLabel, "whichMouseButtonStr",whichMouseButtonStr, "isPressed",isPressed)
+    if whichMouseButtonStr ~= "RightButton" then return end
+
 
     local reagentFrame = reagentBtn:GetParent()
     local craftInfo = reagentFrame.reagentSlotSchematic
@@ -358,15 +337,17 @@ function reagentCallbackForPostClick(reagentBtn, whichMouseButtonStr, isPressed)
 
     debug.info:out("=",7, "You PostClicked me with", "itemId",itemId, "recipeId", recipeId)
     if recipeId then
+        debug.info:out("=",7, "opening :-)", "itemId",itemId, "recipeId", recipeId)
         openRecipe(recipeId, SND.ENTER)
         history:push(recipeId)
     else
-        debug.info:dump(itemToRecipeIdMapping)
+        debug.info:out("=",7, "You PostClicked me but I have no recipe ID", "itemId",itemId, "recipeId", recipeId)
     end
 end
 
 function reagentCallbackForOnEnter(reagentBtn)
-    debug.info:out(">",7, "Enter reagent!", "TOOLTIP_REAGENT",CraftyNav.L10N.TOOLTIP_REAGENT)
+    local debugLabel = reagentBtn:GetItemLink() or "-fuckyoublizzard-"
+    debug.info:out(">",7, "Enter reagent!", debugLabel)
     CraftyNav:callPreviousCallback(reagentBtn, "OnEnter")
     GameTooltip:AddLine(CraftyNav.L10N.TOOLTIP_REAGENT, 0, 1, 0)
     GameTooltip:Show()
@@ -392,7 +373,7 @@ SND = {
 play = PlaySound
 
 -------------------------------------------------------------------------------
--- Naqvigation "Back" and "Forward" Buttons
+-- Navigation "Back" and "Forward" Buttons
 -------------------------------------------------------------------------------
 
 function createNavButtons()
@@ -456,6 +437,14 @@ end
 -- CraftyNav utils
 -------------------------------------------------------------------------------
 
+function isTableNotEmpty(table)
+    return table and next(table)
+end
+
+function isEmptyTable(table)
+    return not isTableNotEmpty(table)
+end
+
 -- ensure the data structure is ready to store values at the given coordinates
 function vivify(matrix, x, y)
     if not matrix then matrix = {} end
@@ -495,8 +484,8 @@ function handleOrderListPick(frame)
 end
 
 function handlePick(pathToRecipeDisplay, node)
-    fixHeader(pathToRecipeDisplay)
-    fixReagents(pathToRecipeDisplay)
+    hookHeader(pathToRecipeDisplay)
+    hookReagents(pathToRecipeDisplay)
     if not node then return end
     local recipe = node and node.data and node.data.recipeInfo and node.data.recipeInfo.recipeID
     if recipe then
@@ -511,7 +500,6 @@ end
 
 function initalizeAddonStuff()
     assert(ProfessionsFrame, "can't find the ProfessionsFrame object")
-    CraftyNav:createItemToRecipeIdMapping() -- can't assume OnSelectionChanged will happen before a recipe is displayed
 
     TooltipDataProcessor.AddTooltipPostCall(Enum.TooltipDataType.Item, addHelpTextToToolTip) -- TooltipDataProcessor.AllTypes
 
@@ -519,7 +507,6 @@ function initalizeAddonStuff()
     -- create event listeners (for OnShow & Selections) that will in-turn...
     -- then create/reinitialize the necessary click handlers which will...
     -- then perform the actual navigation.
-    ProfessionsFrame.CraftingPage:HookScript("OnShow", initWhenOnShow)
     ProfessionsFrame.CraftingPage.RecipeList.selectionBehavior:RegisterCallback("OnSelectionChanged", handleRecipeListPick)
     ProfessionsFrame.OrdersPage.OrderView:HookScript("OnShow", handleOrderListPick)
 
