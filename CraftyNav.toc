@@ -1,5 +1,5 @@
-## Version: 11.1.0.a
-## Interface: 110100
+## Version: 11.1.5
+## Interface: 110105
 ## Title: CraftyNav
 ## Author: Scott Ingram
 ## IconTexture: Interface\Icons\inv_10_dungeonjewelry_explorer_trinket_1compass_color1
