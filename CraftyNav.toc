@@ -1,5 +1,5 @@
-## Version: 12.0.0.prepatch.1
-## Interface: 120000
+## Version: 12.1.0
+## Interface: 120100, 120005, 120001, 120000
 ## Title: CraftyNav
 ## Author: Scott Ingram
 ## IconTexture: Interface\Icons\inv_10_dungeonjewelry_explorer_trinket_1compass_color1
